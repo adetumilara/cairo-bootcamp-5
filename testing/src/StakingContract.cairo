@@ -43,7 +43,8 @@ mod Staking {
         user_reward_per_token_paid: Map<ContractAddress, u256>, // reward per token paid to user
         rewards: Map<ContractAddress, u256>, // pending rewards for user
         balances: Map<ContractAddress, u256>, // staked balances
-        stakes: Map<ContractAddress, StakeDetails>,
+        stake_count: u256,
+        stakes: Map<u256, StakeDetails>,
         // Global state
         total_supply: u256 // total staked tokens
     }
@@ -99,14 +100,6 @@ mod Staking {
     }
 
 
-    #[starknet::interface]
-    trait IOwnerFunctions<TContractState> {
-        fn fund_rewards(ref self: TContractState, amount: u256, duration: u64);
-        fn pause(ref self: TContractState);
-        fn unpause(ref self: TContractState);
-        fn recover_erc20(ref self: TContractState, token: ContractAddress, amount: u256);
-    }
-
     #[constructor]
     fn constructor(
         ref self: ContractState, reward_token: ContractAddress, stark_token: ContractAddress,
@@ -118,10 +111,12 @@ mod Staking {
     #[abi(embed_v0)]
     impl StakingImpl of IStaking<ContractState> {
         /// Stake tokens to earn rewards
-        fn stake(ref self: ContractState, amount: u256, duration: u64) {
+        fn stake(ref self: ContractState, amount: u256, duration: u64) -> u256 {
             assert(amount > 0, 'Amount must be > 0');
 
             let caller = get_caller_address();
+
+            let id = self.stake_count.read() + 1;
 
             // Transfer tokenget_block_timestamps from user to contract
             let stark_token = IERC20Dispatcher { contract_address: self.stark_token.read() };
@@ -131,15 +126,18 @@ mod Staking {
             let current_balance = self.balances.read(caller);
             self.balances.write(caller, current_balance + amount);
 
-            let stake_details = StakeDetails { owner: caller, duration, amount, valid: true };
+            let stake_details = StakeDetails { id, owner: caller, duration, amount, valid: true };
 
-            self.stakes.write(caller, stake_details);
+            self.stakes.write(id, stake_details);
+            self.stake_count.write(id);
 
             self.emit(Staked { user: caller, amount });
+
+            id
         }
 
-        fn get_stake_details(self: @ContractState, address: ContractAddress) -> StakeDetails {
-            let stake = self.stakes.read(address);
+        fn get_stake_details(self: @ContractState, id: u256) -> StakeDetails {
+            let stake = self.stakes.read(id);
             stake
         }
 
@@ -238,63 +236,6 @@ mod Staking {
         }
     }
 
-    #[abi(embed_v0)]
-    impl OwnerFunctions of IOwnerFunctions<ContractState> {
-        /// Fund rewards for distribution over a period
-        fn fund_rewards(ref self: ContractState, amount: u256, duration: u64) {
-            self.ownable.assert_only_owner();
-            assert(amount > 0, 'Amount must be > 0');
-            assert(duration > 0, 'Duration must be > 0');
-
-            self.update_reward_per_token_stored();
-
-            let current_time = get_block_timestamp();
-            let reward_rate = amount / duration.into();
-
-            // If there's an ongoing period, add to it
-            let period_finish = self.period_finish.read();
-            if current_time < period_finish {
-                let remaining = period_finish - current_time;
-                let leftover = remaining.into() * self.reward_rate.read();
-                self.reward_rate.write(leftover / duration.into() + reward_rate);
-            } else {
-                self.reward_rate.write(reward_rate);
-            }
-
-            self.last_update_time.write(current_time);
-            self.period_finish.write(current_time + duration);
-
-            // Transfer reward tokens to contract
-            let reward_token = IERC20Dispatcher { contract_address: self.reward_token.read() };
-            reward_token.transfer_from(get_caller_address(), get_contract_address(), amount);
-
-            self.emit(RewardsFunded { amount, duration });
-        }
-
-        /// Pause staking operations
-        fn pause(ref self: ContractState) {
-            self.ownable.assert_only_owner();
-            self.pausable.pause();
-        }
-
-        /// Unpause staking operations
-        fn unpause(ref self: ContractState) {
-            self.ownable.assert_only_owner();
-            self.pausable.unpause();
-        }
-
-        /// Recover accidentally sent tokens (cannot recover staked or reward tokens)
-        fn recover_erc20(ref self: ContractState, token: ContractAddress, amount: u256) {
-            self.ownable.assert_only_owner();
-            assert(token != self.stark_token.read(), 'Cannot recover staked token');
-            assert(token != self.reward_token.read(), 'Cannot recover reward token');
-
-            let token_dispatcher = IERC20Dispatcher { contract_address: token };
-            token_dispatcher.transfer(self.ownable.owner(), amount);
-
-            self.emit(RecoveredTokens { token, amount, to: self.ownable.owner() });
-        }
-    }
 
     #[generate_trait]
     impl InternalImpl of InternalTrait {

@@ -1,6 +1,10 @@
 use openzeppelin::token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
-use snforge_std::{ContractClassTrait, DeclareResultTrait, declare};
+use snforge_std::{
+    ContractClassTrait, DeclareResultTrait, declare, start_cheat_caller_address,
+    stop_cheat_caller_address,
+};
 use starknet::{ContractAddress, contract_address_const};
+use test::RewardToken::{IExternalDispatcher, IExternalDispatcherTrait};
 use test::interfaces::IStaking::{IStakingDispatcher, IStakingDispatcherTrait};
 
 fn deploy_contract() -> (IStakingDispatcher, ContractAddress, ContractAddress) {
@@ -28,10 +32,10 @@ fn deploy_erc20() -> (ContractAddress, ContractAddress) {
     owner.serialize(ref calldata);
     name.serialize(ref calldata);
     sym.serialize(ref calldata);
-    
+
     let (strk_address, _) = erc20_class.deploy(@calldata).unwrap();
 
-    let mut usdc_calldata =  ArrayTrait::new();
+    let mut usdc_calldata = ArrayTrait::new();
     owner.serialize(ref usdc_calldata);
     reward.serialize(ref usdc_calldata);
     reward_sym.serialize(ref usdc_calldata);
@@ -50,38 +54,50 @@ fn test_deployment() {
     assert(s_address == strk_address, 'invalid strk address');
     assert(r_address == reward_address, 'invalid reward address');
 }
-// fn test_increase_balance() {
-//     let amount = 1;
-//     let add = 10;
-//     let contract_address = deploy_contract(amount);
 
-//     let dispatcher = IHelloStarknetDispatcher { contract_address };
+#[test]
+fn test_stake() {
+    let (dispatcher, strk_address, _) = deploy_contract();
+    let caller: ContractAddress = contract_address_const::<'aji'>();
+    let stake_amount: u256 = 1000;
+    let stake_duration: u64 = 60 * 60 * 24 * 7; // 1 week
 
-//     let balance_before = dispatcher.get_balance();
-//     assert(balance_before == amount, 'Invalid balance');
+    // Mint some STRK to caller
+    let strk_mint = IExternalDispatcher { contract_address: strk_address };
+    strk_mint.mint(caller, 10000);
 
-//     dispatcher.increase_balance(add);
+    let strk = IERC20Dispatcher { contract_address: strk_address };
+    let initial_balance = strk.balance_of(caller);
 
-//     let balance_after = dispatcher.get_balance();
-//     assert(balance_after == (amount + add), 'Invalid balance');
-// }
-// #[test]
-// #[ignore]
-// #[feature("safe_dispatcher")]
-// fn test_cannot_increase_balance_with_zero_value() {
-//     let contract_address = deploy_contract();
+    start_cheat_caller_address(strk_address, caller);
+    // Approve staking contract to spend caller's STRK
+    strk.approve(dispatcher.contract_address, stake_amount);
+    let allowance = strk.allowance(caller, dispatcher.contract_address);
+    stop_cheat_caller_address(strk_address);
 
-//     let safe_dispatcher = IHelloStarknetSafeDispatcher { contract_address };
+    println!("Allowance: {}", allowance);
+    println!("Initial Balance: {}", initial_balance);
 
-//     let balance_before = safe_dispatcher.get_balance().unwrap();
-//     assert(balance_before == 0, 'Invalid balance');
+    start_cheat_caller_address(dispatcher.contract_address, caller);
+    // Stake tokens
+    let stake_id = dispatcher.stake(stake_amount, stake_duration);
+    let post_stake_balance = strk.balance_of(caller);
 
-//     match safe_dispatcher.increase_balance(0) {
-//         Result::Ok(_) => core::panic_with_felt252('Should have panicked'),
-//         Result::Err(panic_data) => {
-//             assert(*panic_data.at(0) == 'Amount cannot be 0', *panic_data.at(0));
-//         }
-//     };
-// }
+    let p_allowance = strk.allowance(caller, dispatcher.contract_address);
+    println!("Allowance after stake: {}", p_allowance);
+    println!("Post stake Balance: {}", post_stake_balance);
 
+    assert(post_stake_balance == initial_balance - stake_amount, 'stake failed');
+    let contract_balance = strk.balance_of(dispatcher.contract_address);
+    assert(contract_balance == stake_amount, 'contract balance incorrect');
 
+    let staked_balance = dispatcher.balance_of(caller);
+    assert(staked_balance == stake_amount, 'staked balance incorrect');
+
+    // Get stake details
+    let stake_details = dispatcher.get_stake_details(stake_id);
+    assert(stake_details.owner == caller, 'stake owner incorrect');
+    assert(stake_details.amount == stake_amount, 'stake amount incorrect');
+    assert(stake_details.duration == stake_duration, 'stake duration incorrect');
+    assert(stake_details.valid, 'stake valid incorrect');
+}
