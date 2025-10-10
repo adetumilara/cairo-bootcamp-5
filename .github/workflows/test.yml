@@ -1,4 +1,4 @@
-name: Test Cohort 4 Contracts
+name: Test Contracts
 on:
   push:
   pull_request:
