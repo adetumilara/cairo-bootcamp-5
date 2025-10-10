@@ -13,7 +13,7 @@ pub mod Counter {
     #[event]
     #[derive(Drop, starknet::Event)]
     pub enum Event {
-        CountUpdated : CountUpdated,
+        CountUpdated: CountUpdated,
     }
 
     #[derive(Drop, starknet::Event)]
