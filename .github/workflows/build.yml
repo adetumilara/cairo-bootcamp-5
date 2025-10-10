@@ -1,4 +1,4 @@
-name: Build and contracts
+name: Build contracts and check formatting
 on:
   push:
   merge_group:
@@ -11,5 +11,6 @@ jobs:
       - uses: software-mansion/setup-scarb@v1
         with:
           scarb-version: "2.12.2"
+      - run: scarb build
       - run: scarb fmt --check
       - run: scarb lint
