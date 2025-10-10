@@ -1,10 +1,13 @@
 /// Simple contract for managing balance.
 #[starknet::contract]
 pub mod HelloStarknet {
-    
     use cairo_bootcamp_5::interfaces::IHelloStarknet::IHelloStarknet;
-    // use starknet::storage::{StoragePointerReadAccess, StoragePathEntry, StoragePointerWriteAccess, Map };
-    use starknet::storage::{Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess, StoragePointerWriteAccess };
+    // use starknet::storage::{StoragePointerReadAccess, StoragePathEntry,
+    // StoragePointerWriteAccess, Map };
+    use starknet::storage::{
+        Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
+        StoragePointerWriteAccess,
+    };
     use starknet::{ContractAddress, get_caller_address};
 
     #[storage]
@@ -16,7 +19,7 @@ pub mod HelloStarknet {
     #[event]
     #[derive(Drop, starknet::Event)]
     pub enum Event {
-        Balance : BalanceIncreased,
+        Balance: BalanceIncreased,
     }
 
     #[derive(Drop, starknet::Event)]
@@ -42,7 +45,7 @@ pub mod HelloStarknet {
 
             // self.balance.write(self.balance.read() + amount);
 
-            self.emit(BalanceIncreased{caller, amount});
+            self.emit(BalanceIncreased { caller, amount });
         }
 
         fn get_balance(self: @ContractState) -> felt252 {

@@ -1,0 +1,16 @@
+name: Build contracts and check formatting
+on:
+  push:
+  merge_group:
+  pull_request:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: software-mansion/setup-scarb@v1
+        with:
+          scarb-version: "2.12.2"
+      - run: scarb build
+      - run: scarb fmt --check
+      - run: scarb lint
