@@ -70,3 +70,5 @@ sncast invoke \
 - Push your updated Counter contract to your GitHub repo.
 - Share your sncast transaction hash as proof of STRK token transfer.
 - Create a PR
+
+Task A Link: https://hackmd.io/@xxTnX0TsRKiPWAv2onsP0Q/S1ktzIITxx
